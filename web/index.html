@@ -91,6 +91,10 @@
               🛡️ El sistema verificará que tu correo tenga rol <code>admin</code> en Firestore.
             </div>
 
+            <button type="button" id="demoLoginBtn" class="btn sm ghost full" style="width: 100%; font-size: 12px; margin-bottom: 10px; border: 1px dashed var(--color-line); color: var(--color-ink);">
+              ⚡ Acceso Rápido (Modo Admin Local)
+            </button>
+
             <p id="loginError" class="error-text" role="alert" aria-live="assertive"></p>
           </div>
         </div>
@@ -227,6 +231,7 @@
                   <option value="price_desc">Precio: Mayor a Menor</option>
                 </select>
 
+                <button type="button" id="manageCategoriesBtn" class="btn sm" title="Crear, editar o eliminar categorías">🏷️ Categorías</button>
                 <button type="button" id="seed50Btn" class="btn sm" title="Poblar catálogo con 50 prendas de marketing">🌱 Sembrar 50 Prendas</button>
               </div>
             </div>
@@ -275,6 +280,37 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- Categories Modal -->
+  <div id="categoriesModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="categoriesModalTitle">
+    <div class="modal-card" style="width: min(100%, 540px);">
+      <h3 id="categoriesModalTitle">Gestionar Categorías</h3>
+      <p class="muted" style="margin-bottom: 14px; font-size: 13px;">Crea nuevas categorías o edita las existentes. Al renombrar una categoría se actualizarán automáticamente sus prendas.</p>
+
+      <div style="display: flex; gap: 8px; margin-bottom: 16px;">
+        <input type="text" id="newCategoryInput" placeholder="Ej. Calzado, Deportivo, Urbano..." style="flex: 1; padding: 9px 12px; border: 1px solid var(--line); border-radius: 8px; font-size: 13px;" />
+        <button type="button" id="addCategoryBtn" class="btn primary sm" style="white-space: nowrap;">+ Agregar</button>
+      </div>
+
+      <div style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 18px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px; min-width: 0;">
+          <thead>
+            <tr style="background: var(--paper); border-bottom: 1px solid var(--line); text-align: left;">
+              <th style="padding: 8px 12px;">Categoría</th>
+              <th style="padding: 8px 12px; text-align: center;">Prendas</th>
+              <th style="padding: 8px 12px; text-align: right;">Acciones</th>
+            </tr>
+          </thead>
+          <tbody id="categoriesTableBody">
+          </tbody>
+        </table>
+      </div>
+
+      <div class="modal-actions">
+        <button type="button" id="closeCategoriesBtn" class="btn">Cerrar</button>
+      </div>
+    </div>
   </div>
 
   <!-- Delete Modal -->

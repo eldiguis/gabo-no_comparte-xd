@@ -1,7 +1,7 @@
 name: flutter_application_1
 description: "Moda con probador virtual IA"
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.2.0+12
 
 environment:
   sdk: ^3.13.5

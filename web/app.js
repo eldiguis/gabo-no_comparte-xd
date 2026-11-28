@@ -33,7 +33,12 @@ try {
 // 2. Constants & State
 const CACHE_KEY = 'modo_admin_products_cache';
 const CACHE_TIMESTAMP_KEY = 'modo_admin_cache_time';
+const CATEGORIES_KEY = 'modo_admin_categories';
 const CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+const DEFAULT_CATEGORIES = ['Hombre', 'Mujer', 'Niños', 'Niñas', 'Accesorios'];
+let customCategories = [...DEFAULT_CATEGORIES];
+let isDemoMode = false;
 
 const STORE_LABELS = {
   store_jockey: 'Jockey Plaza',
@@ -60,6 +65,7 @@ const emailLoginForm = document.getElementById('emailLoginForm');
 const adminEmailInput = document.getElementById('adminEmail');
 const adminPasswordInput = document.getElementById('adminPassword');
 const googleLoginBtn = document.getElementById('googleLoginBtn');
+const demoLoginBtn = document.getElementById('demoLoginBtn');
 const loginError = document.getElementById('loginError');
 const sessionBadge = document.getElementById('sessionBadge');
 const sessionLabel = document.getElementById('sessionLabel');
@@ -76,9 +82,17 @@ const productsBody = document.getElementById('productsBody');
 const searchInput = document.getElementById('searchInput');
 const searchClearBtn = document.getElementById('searchClearBtn');
 const categoryFilter = document.getElementById('categoryFilter');
+const categorySelect = document.getElementById('category');
 const storeFilter = document.getElementById('storeFilter');
 const sortFilter = document.getElementById('sortFilter');
 const pageSizeSelect = document.getElementById('pageSizeSelect');
+
+const manageCategoriesBtn = document.getElementById('manageCategoriesBtn');
+const categoriesModal = document.getElementById('categoriesModal');
+const newCategoryInput = document.getElementById('newCategoryInput');
+const addCategoryBtn = document.getElementById('addCategoryBtn');
+const categoriesTableBody = document.getElementById('categoriesTableBody');
+const closeCategoriesBtn = document.getElementById('closeCategoriesBtn');
 
 const statTotal = document.getElementById('statTotal');
 const statCats = document.getElementById('statCats');
@@ -97,23 +111,30 @@ const loadingText = document.getElementById('loadingText');
 const toastContainer = document.getElementById('toastContainer');
 
 // 4. Utility Functions
+function withTimeout(promise, ms, fallbackMsg = 'Tiempo de espera agotado') {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error(fallbackMsg)), ms))
+  ]);
+}
+
 async function checkFirebaseHealth() {
   const dot = document.getElementById('firebaseHealthDot');
   const text = document.getElementById('firebaseHealthText');
   if (!db) {
-    if (dot) dot.style.background = '#c0392b';
-    if (text) text.textContent = 'Firebase no disponible';
+    if (dot) dot.style.background = '#f39c12';
+    if (text) text.textContent = 'Modo Local (Offline)';
     return;
   }
   const start = Date.now();
   try {
-    await db.collection('productos').limit(1).get();
+    await withTimeout(db.collection('productos').limit(1).get(), 3500, 'Timeout');
     const ms = Date.now() - start;
     if (dot) dot.style.background = '#27ae60';
     if (text) text.textContent = `Firebase OK (${ms}ms)`;
   } catch (err) {
-    if (dot) dot.style.background = '#c0392b';
-    if (text) text.textContent = 'Error Firebase: ' + (err.code || 'falló');
+    if (dot) dot.style.background = '#f39c12';
+    if (text) text.textContent = 'Modo Local / Lento';
   }
 }
 
@@ -233,23 +254,185 @@ async function fetchProductsFromFirestore() {
 async function loadProducts(forceRefresh = false) {
   showLoading('Obteniendo prendas...');
   try {
+    if (isDemoMode) {
+      const cached = getCachedProducts();
+      if (cached && Array.isArray(cached) && cached.length > 0) {
+        allProducts = cached;
+      } else if (Array.isArray(window.SEED_PRODUCTS_50)) {
+        allProducts = window.SEED_PRODUCTS_50.map(p => ({ ...p }));
+        setCachedProducts(allProducts);
+      }
+      syncCategoriesFromProducts();
+      applyFilters();
+      return;
+    }
+
     if (!forceRefresh) {
       const cached = getCachedProducts();
       if (cached && Array.isArray(cached) && cached.length > 0) {
         allProducts = cached;
+        syncCategoriesFromProducts();
         applyFilters();
         hideLoading();
         return;
       }
     }
-    allProducts = await fetchProductsFromFirestore();
+    allProducts = await withTimeout(fetchProductsFromFirestore(), 4500, 'Tiempo de espera agotado');
+    if (allProducts.length === 0 && Array.isArray(window.SEED_PRODUCTS_50)) {
+      allProducts = window.SEED_PRODUCTS_50.map(p => ({ ...p }));
+    }
     setCachedProducts(allProducts);
+    syncCategoriesFromProducts();
     applyFilters();
   } catch (err) {
-    showToast('Error cargando catálogo: ' + (err.message || err), 'error');
+    console.warn('[LoadProducts Fallback]', err);
+    const cached = getCachedProducts();
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      allProducts = cached;
+    } else if (Array.isArray(window.SEED_PRODUCTS_50)) {
+      allProducts = window.SEED_PRODUCTS_50.map(p => ({ ...p }));
+    }
+    syncCategoriesFromProducts();
+    applyFilters();
+    showToast('Cargado catálogo local (' + (err.message || 'offline') + ')', 'error');
   } finally {
     hideLoading();
   }
+}
+
+// 6.5 Category Management
+function loadSavedCategories() {
+  try {
+    const raw = localStorage.getItem(CATEGORIES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        customCategories = parsed;
+        return;
+      }
+    }
+  } catch (_) {}
+  customCategories = [...DEFAULT_CATEGORIES];
+}
+
+function saveCategoriesLocal() {
+  try {
+    localStorage.setItem(CATEGORIES_KEY, JSON.stringify(customCategories));
+  } catch (_) {}
+}
+
+function syncCategoriesFromProducts() {
+  loadSavedCategories();
+  const productCats = allProducts.map(p => cleanString(p.category)).filter(Boolean);
+  let changed = false;
+  productCats.forEach(c => {
+    if (!customCategories.includes(c)) {
+      customCategories.push(c);
+      changed = true;
+    }
+  });
+  if (changed) saveCategoriesLocal();
+  renderCategorySelects();
+}
+
+function renderCategorySelects() {
+  if (categorySelect) {
+    const prevVal = categorySelect.value;
+    categorySelect.innerHTML = '';
+    customCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      categorySelect.appendChild(opt);
+    });
+    if (customCategories.includes(prevVal)) {
+      categorySelect.value = prevVal;
+    }
+  }
+  if (categoryFilter) {
+    const prevFilter = categoryFilter.value;
+    categoryFilter.innerHTML = '<option value="">Todas las categorías</option>';
+    customCategories.forEach(cat => {
+      const opt = document.createElement('option');
+      opt.value = cat;
+      opt.textContent = cat;
+      categoryFilter.appendChild(opt);
+    });
+    if (customCategories.includes(prevFilter) || prevFilter === '') {
+      categoryFilter.value = prevFilter;
+    }
+  }
+}
+
+function renderCategoriesModal() {
+  if (!categoriesTableBody) return;
+  categoriesTableBody.innerHTML = '';
+  customCategories.forEach(cat => {
+    const count = allProducts.filter(p => p.category === cat).length;
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--line)';
+    tr.innerHTML = `
+      <td style="padding: 10px 12px; font-weight: 600;">${cat}</td>
+      <td style="padding: 10px 12px; text-align: center;"><span class="badge">${count}</span></td>
+      <td style="padding: 10px 12px; text-align: right;">
+        <button type="button" class="btn sm" data-cat-action="rename" data-cat="${cat}">Editar</button>
+        <button type="button" class="btn sm danger" data-cat-action="delete" data-cat="${cat}" style="margin-left:4px;">Eliminar</button>
+      </td>
+    `;
+    categoriesTableBody.appendChild(tr);
+  });
+}
+
+async function renameCategoryGlobal(oldName, newName) {
+  const cleanNew = cleanString(newName);
+  if (!cleanNew || cleanNew === oldName) return;
+  if (customCategories.includes(cleanNew)) {
+    showToast(`La categoría "${cleanNew}" ya existe.`, 'error');
+    return;
+  }
+
+  const idx = customCategories.indexOf(oldName);
+  if (idx !== -1) customCategories[idx] = cleanNew;
+  saveCategoriesLocal();
+
+  // Update products locally and in Firestore
+  const affected = allProducts.filter(p => p.category === oldName);
+  affected.forEach(p => { p.category = cleanNew; });
+  setCachedProducts(allProducts);
+
+  if (db && !isDemoMode && affected.length > 0) {
+    showLoading(`Actualizando ${affected.length} prendas…`);
+    try {
+      const batch = db.batch();
+      affected.forEach(p => {
+        const ref = db.collection('productos').doc(p.id);
+        batch.update(ref, { category: cleanNew, categoria: cleanNew });
+      });
+      await batch.commit();
+    } catch (err) {
+      console.warn('Error actualizando categoría en Firestore:', err);
+    } finally {
+      hideLoading();
+    }
+  }
+
+  renderCategorySelects();
+  renderCategoriesModal();
+  applyFilters();
+  showToast(`Categoría "${oldName}" renombrada a "${cleanNew}".`);
+}
+
+function deleteCategoryGlobal(catName) {
+  const count = allProducts.filter(p => p.category === catName).length;
+  if (count > 0) {
+    showToast(`No puedes eliminar "${catName}" porque tiene ${count} prendas asignadas.`, 'error');
+    return;
+  }
+  customCategories = customCategories.filter(c => c !== catName);
+  saveCategoriesLocal();
+  renderCategorySelects();
+  renderCategoriesModal();
+  showToast(`Categoría "${catName}" eliminada.`);
 }
 
 // 7. Filtering, Sorting & Pagination
@@ -754,7 +937,68 @@ googleLoginBtn.addEventListener('click', async () => {
   }
 });
 
+if (demoLoginBtn) {
+  demoLoginBtn.addEventListener('click', () => {
+    isDemoMode = true;
+    loginError.textContent = '';
+    showToast('Modo Administrador Local activado');
+    handleUserLoggedIn({
+      uid: 'demo_admin',
+      displayName: 'Admin MODO (Local)',
+      email: 'admin@modo.pe'
+    });
+  });
+}
+
+if (manageCategoriesBtn) {
+  manageCategoriesBtn.addEventListener('click', () => {
+    renderCategoriesModal();
+    if (categoriesModal) categoriesModal.classList.remove('hidden');
+  });
+}
+
+if (closeCategoriesBtn) {
+  closeCategoriesBtn.addEventListener('click', () => {
+    if (categoriesModal) categoriesModal.classList.add('hidden');
+  });
+}
+
+if (addCategoryBtn) {
+  addCategoryBtn.addEventListener('click', () => {
+    const val = cleanString(newCategoryInput ? newCategoryInput.value : '');
+    if (!val) return;
+    if (customCategories.includes(val)) {
+      showToast(`La categoría "${val}" ya existe.`, 'error');
+      return;
+    }
+    customCategories.push(val);
+    saveCategoriesLocal();
+    if (newCategoryInput) newCategoryInput.value = '';
+    renderCategorySelects();
+    renderCategoriesModal();
+    showToast(`Categoría "${val}" agregada.`);
+  });
+}
+
+if (categoriesTableBody) {
+  categoriesTableBody.addEventListener('click', async (e) => {
+    const btn = e.target.closest('button[data-cat-action]');
+    if (!btn) return;
+    const action = btn.dataset.catAction;
+    const cat = btn.dataset.cat;
+    if (action === 'rename') {
+      const nuevo = prompt(`Nuevo nombre para la categoría "${cat}":`, cat);
+      if (nuevo && cleanString(nuevo) !== cat) {
+        await renameCategoryGlobal(cat, nuevo);
+      }
+    } else if (action === 'delete') {
+      deleteCategoryGlobal(cat);
+    }
+  });
+}
+
 logoutBtn.addEventListener('click', async () => {
+  isDemoMode = false;
   if (auth && auth.currentUser) {
     await auth.signOut();
   }
@@ -777,7 +1021,7 @@ if (auth) {
       if (!currentUser || currentUser.uid !== user.uid) {
         await verifyAdminRoleAndLogin(user);
       }
-    } else {
+    } else if (!isDemoMode) {
       handleUserLoggedOut();
     }
   });
@@ -799,5 +1043,8 @@ if (auth) {
   }, 4200);
 })();
 
-// Health check on load
+// Health check & initial UI safeguard on load
+hideLoading();
+loadSavedCategories();
+renderCategorySelects();
 checkFirebaseHealth();
