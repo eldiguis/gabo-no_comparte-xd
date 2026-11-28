@@ -54,6 +54,7 @@ class _ShopShellState extends State<ShopShell> {
   int tab = 0;
   DateTime? lastBackPressTime;
   String category = 'Todo';
+  String selectedProductType = 'Todos';
 
   // ── Cart ────────────────────────────────────────────────────────────────────
   final Map<String, int> cartQuantities = {};
@@ -408,14 +409,29 @@ class _ShopShellState extends State<ShopShell> {
     return ['Todo', 'Favoritos', ...cats];
   }
 
+  List<String> get availableProductTypes {
+    final baseProducts = category == 'Favoritos'
+        ? catalogProducts.where((p) => favorites.contains(p.id))
+        : (category == 'Todo'
+            ? catalogProducts
+            : catalogProducts.where((p) => p.category == category));
+    final types = baseProducts.map((p) => p.productType).toSet().toList()..sort();
+    return ['Todos', ...types];
+  }
+
   List<Garment> get visibleProducts {
+    Iterable<Garment> list;
     if (category == 'Favoritos') {
-      return catalogProducts.where((p) => favorites.contains(p.id)).toList();
+      list = catalogProducts.where((p) => favorites.contains(p.id));
+    } else if (category == 'Todo') {
+      list = catalogProducts;
+    } else {
+      list = catalogProducts.where((p) => p.category == category);
     }
-    if (category == 'Todo') {
-      return catalogProducts;
+    if (selectedProductType != 'Todos') {
+      list = list.where((p) => p.productType == selectedProductType);
     }
-    return catalogProducts.where((p) => p.category == category).toList();
+    return list.toList();
   }
 
   Future<void> _refreshCatalog() async {
@@ -625,7 +641,10 @@ class _ShopShellState extends State<ShopShell> {
                       selected: category == c,
                       onSelected: (_) {
                         HapticFeedback.selectionClick();
-                        setState(() => category = c);
+                        setState(() {
+                          category = c;
+                          selectedProductType = 'Todos';
+                        });
                       },
                       selectedColor: ink,
                       labelStyle: TextStyle(
@@ -1203,20 +1222,29 @@ class _ShopShellState extends State<ShopShell> {
           SliverToBoxAdapter(child: _header()),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 12),
               child: Row(
                 children: [
-                  const Expanded(
+                  Expanded(
                     child: Text(
-                      'Tu bolsa.',
-                      style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          letterSpacing: -1),
+                      cartCount == 0
+                          ? 'Bolsa vacía'
+                          : '$cartCount ${cartCount == 1 ? "artículo" : "artículos"}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -0.5,
+                      ),
                     ),
                   ),
-                  Text('$cartCount artículos',
-                      style: const TextStyle(color: muted, fontSize: 13)),
+                  if (cartCount > 0)
+                    Text(
+                      'S/ ${cartTotalPrice.toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -1358,24 +1386,10 @@ class _ShopShellState extends State<ShopShell> {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 22, 20, 14),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'MI PERFIL',
-                    style: TextStyle(
-                      color: muted,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 1.5,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  const Text('Mi cuenta',
-                      style: TextStyle(
-                          fontSize: 28, fontWeight: FontWeight.w900)),
-                  const SizedBox(height: 14),
                   Row(
                     children: [
                       if (widget.isGoogleAuth)
@@ -1714,6 +1728,18 @@ class _ShopShellState extends State<ShopShell> {
                       ),
                     ),
                     const SizedBox(height: 16),
+                    const Center(
+                      child: Text(
+                        'MODO v1.2.0 (Build 12) • Fashion Tech Platform',
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
                   ],
                 ],
               ),
@@ -2064,6 +2090,43 @@ class _ShopShellState extends State<ShopShell> {
     ];
   }
 
+  Widget _productTypeFilterBar() {
+    final types = availableProductTypes;
+    if (types.length <= 2) return const SizedBox.shrink();
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+      child: Row(
+        children: types.map((t) {
+          final isSel = selectedProductType == t;
+          return Padding(
+            padding: const EdgeInsets.only(right: 6),
+            child: ChoiceChip(
+              label: Text(
+                t,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: isSel ? FontWeight.w700 : FontWeight.w500,
+                  color: isSel ? Colors.white : ink,
+                ),
+              ),
+              selected: isSel,
+              selectedColor: ink,
+              backgroundColor: Colors.white,
+              side: BorderSide(color: isSel ? ink : line),
+              visualDensity: VisualDensity.compact,
+              onSelected: (_) {
+                HapticFeedback.selectionClick();
+                setState(() => selectedProductType = t);
+              },
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
   List<Widget> _shopProductSection() {
     if (catalogLoading) {
       return const [
@@ -2106,8 +2169,9 @@ class _ShopShellState extends State<ShopShell> {
       ];
     }
     return [
+      SliverToBoxAdapter(child: _productTypeFilterBar()),
       SliverPadding(
-        padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 28),
         sliver: SliverGrid(
           delegate: SliverChildBuilderDelegate(
             (_, i) => _productCardItem(visibleProducts[i]),

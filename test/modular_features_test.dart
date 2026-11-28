@@ -19,7 +19,7 @@ void main() {
       expect(shoe.availableSizes, isNot(contains('M')));
     });
 
-    test('Calculates unique size for bags and accessories', () {
+    test('Accessories without apparel sizes expose colors instead of sizes', () {
       const bag = Garment(
         id: 'bag_1',
         name: 'Bolso Tote Minimal',
@@ -27,10 +27,13 @@ void main() {
         price: 'S/ 129',
         image: '',
         tag: 'Accesorios',
+        color: 'Negro / Café',
       );
 
-      expect(bag.availableSizes, equals(['Talla Única']));
-      expect(bag.availableSizes, isNot(contains('L')));
+      expect(bag.hasSizes, isFalse);
+      expect(bag.availableSizes, isEmpty);
+      expect(bag.hasColors, isTrue);
+      expect(bag.availableColors, equals(['Negro', 'Café']));
     });
 
     test('Calculates clothing sizes for apparel', () {

@@ -86,22 +86,35 @@ class _SwipeToMatchScreenState extends State<SwipeToMatchScreen> {
   }
 
   void _setupGarments() {
-    final split = GarmentClassifier.splitCatalog(widget.catalog);
+    final split = GarmentClassifier.splitCatalog(
+      widget.catalog,
+      initialGarment: widget.initialGarment,
+    );
     _tops = split.tops;
     _bottoms = split.bottoms;
 
-    // Si se pasa una prenda inicial desde el detalle, la posicionamos
+    // Si se pasa una prenda inicial desde el detalle, la posicionamos con precisión y la fijamos
     final init = widget.initialGarment;
     if (init != null) {
-      final topIdx = _tops.indexWhere((g) => g.id == init.id);
-      if (topIdx != -1) {
-        _currentTopIndex = topIdx;
-        _isTopLocked = true; // Anclamos la prenda elegida para buscarle combinación
-      } else {
+      if (GarmentClassifier.isBottom(init)) {
         final botIdx = _bottoms.indexWhere((g) => g.id == init.id);
         if (botIdx != -1) {
           _currentBottomIndex = botIdx;
           _isBottomLocked = true;
+        } else {
+          _bottoms.insert(0, init);
+          _currentBottomIndex = 0;
+          _isBottomLocked = true;
+        }
+      } else {
+        final topIdx = _tops.indexWhere((g) => g.id == init.id);
+        if (topIdx != -1) {
+          _currentTopIndex = topIdx;
+          _isTopLocked = true;
+        } else {
+          _tops.insert(0, init);
+          _currentTopIndex = 0;
+          _isTopLocked = true;
         }
       }
     }

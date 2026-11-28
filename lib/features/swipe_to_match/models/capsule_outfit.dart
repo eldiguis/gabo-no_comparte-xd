@@ -86,6 +86,19 @@ class GarmentClassifier {
     'shirt',
     'jacket',
     'blusa',
+    'vestido',
+    'vestidos',
+    'chaleco',
+    'cardigan',
+    'suéter',
+    'sueter',
+    'camiseta',
+    'sobrecamisa',
+    'crop',
+    'manga',
+    'enterizo',
+    'pijama',
+    'buzo',
   ];
 
   static const _bottomKeywords = [
@@ -107,11 +120,19 @@ class GarmentClassifier {
     'botas',
     'shoes',
     'sneakers',
+    'bermuda',
+    'bermudas',
+    'leggings',
+    'legging',
+    'overol',
+    'culotte',
+    'tutú',
+    'tutu',
   ];
 
   /// Determina si una prenda es de la parte superior
   static bool isTop(Garment g) {
-    final search = '${g.name} ${g.tag}'.toLowerCase();
+    final search = '${g.name} ${g.tag} ${g.category}'.toLowerCase();
     for (final kw in _topKeywords) {
       if (search.contains(kw)) return true;
     }
@@ -120,7 +141,7 @@ class GarmentClassifier {
 
   /// Determina si una prenda es de la parte inferior o calzado
   static bool isBottom(Garment g) {
-    final search = '${g.name} ${g.tag}'.toLowerCase();
+    final search = '${g.name} ${g.tag} ${g.category}'.toLowerCase();
     for (final kw in _bottomKeywords) {
       if (search.contains(kw)) return true;
     }
@@ -128,34 +149,56 @@ class GarmentClassifier {
   }
 
   /// Separa un catálogo completo en dos listas balanceadas: Tops y Bottoms.
-  /// Si el catálogo no tiene suficientes prendas clasificables, distribuye
-  /// de forma segura para garantizar que siempre haya prendas para deslizar.
+  /// Garantiza que si se especifica [initialGarment], se incluya exactamente
+  /// en su categoría y se posicione como opción activa.
   static ({List<Garment> tops, List<Garment> bottoms}) splitCatalog(
-    List<Garment> all,
-  ) {
-    if (all.isEmpty) {
+    List<Garment> all, {
+    Garment? initialGarment,
+  }) {
+    if (all.isEmpty && initialGarment == null) {
       return (tops: <Garment>[], bottoms: <Garment>[]);
+    }
+
+    final fullList = List<Garment>.from(all);
+    if (initialGarment != null &&
+        !fullList.any((g) => g.id == initialGarment.id)) {
+      fullList.insert(0, initialGarment);
     }
 
     final tops = <Garment>[];
     final bottoms = <Garment>[];
 
-    for (final item in all) {
-      if (isTop(item)) {
-        tops.add(item);
-      } else if (isBottom(item)) {
+    for (final item in fullList) {
+      if (isBottom(item)) {
         bottoms.add(item);
+      } else if (isTop(item)) {
+        tops.add(item);
+      } else {
+        // Por defecto si no coincide palabra clave
+        tops.add(item);
       }
     }
 
-    // Si una de las dos listas quedó vacía o con muy pocas prendas,
-    // distribuimos las prendas restantes de forma balanceada.
+    // Asegurar que initialGarment esté presente en su lista correspondiente
+    if (initialGarment != null) {
+      if (isBottom(initialGarment)) {
+        if (!bottoms.any((g) => g.id == initialGarment.id)) {
+          bottoms.insert(0, initialGarment);
+        }
+      } else {
+        if (!tops.any((g) => g.id == initialGarment.id)) {
+          tops.insert(0, initialGarment);
+        }
+      }
+    }
+
+    // Si una de las dos listas quedó vacía, balanceamos con cuidado
     if (tops.isEmpty || bottoms.isEmpty) {
-      final half = (all.length / 2).ceil();
-      return (
-        tops: all.sublist(0, math.min(half, all.length)),
-        bottoms: all.sublist(math.min(half, all.length)),
-      );
+      if (tops.isEmpty && bottoms.length > 1) {
+        tops.add(bottoms.removeLast());
+      } else if (bottoms.isEmpty && tops.length > 1) {
+        bottoms.add(tops.removeLast());
+      }
     }
 
     return (tops: tops, bottoms: bottoms);

@@ -18,7 +18,7 @@ void main() {
     await tester.tap(find.text('Cuenta'));
     await tester.pump();
 
-    expect(find.text('Mi cuenta'), findsOneWidget);
+    expect(find.text('Mi cuenta'), findsNothing);
     expect(find.text('Gabriela'), findsOneWidget);
     expect(find.text('Accesibilidad'), findsOneWidget);
     expect(find.text('Texto grande'), findsOneWidget);

@@ -43,7 +43,8 @@ class ProductDetailPage extends StatefulWidget {
 }
 
 class _ProductDetailPageState extends State<ProductDetailPage> {
-  late String size;
+  String? size;
+  String? color;
   int quantity = 1;
   int imageIndex = 0;
   late bool localFavorite;
@@ -53,11 +54,22 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
     super.initState();
     localFavorite = widget.isFavorite;
     final available = widget.product.availableSizes;
-    size = available.contains('M')
-        ? 'M'
-        : available.contains('38')
-            ? '38'
-            : available.first;
+    if (available.isNotEmpty) {
+      size = available.contains('M')
+          ? 'M'
+          : available.contains('38')
+              ? '38'
+              : available.first;
+    } else {
+      size = null;
+    }
+
+    final colors = widget.product.availableColors;
+    if (colors.isNotEmpty) {
+      color = colors.first;
+    } else {
+      color = null;
+    }
   }
 
   @override
@@ -185,16 +197,38 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      p.category,
-                      style: const TextStyle(
-                        color: muted,
-                        fontSize: 10,
-                        letterSpacing: 1.3,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    Row(
+                      children: [
+                        Text(
+                          p.category.toUpperCase(),
+                          style: const TextStyle(
+                            color: muted,
+                            fontSize: 10,
+                            letterSpacing: 1.3,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F0ED),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            p.productType.toUpperCase(),
+                            style: const TextStyle(
+                              color: ink,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: 6),
                     Text(
                       p.name.toUpperCase(),
                       style: const TextStyle(
@@ -253,48 +287,92 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const Text(
-                      'Una pieza versátil, cómoda y fácil de combinar. Diseñada para acompañarte en cualquier ocasión.',
-                      style: TextStyle(color: muted, fontSize: 12, height: 1.5),
-                    ),
-                    const SizedBox(height: 15),
                     Text(
-                      p.availableSizes.length == 1
-                          ? 'TALLA DISPONIBLE'
-                          : 'SELECCIONA TU TALLA',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: .8,
+                      p.description.trim().isNotEmpty
+                          ? p.description.trim()
+                          : 'Una pieza versátil, cómoda y de alta calidad. Diseñada para acompañarte con elegancia en cualquier ocasión.',
+                      style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
+                    ),
+                    if (p.hasSizes && p.availableSizes.isNotEmpty) ...[
+                      const SizedBox(height: 15),
+                      Text(
+                        p.availableSizes.length == 1
+                            ? 'TALLA DISPONIBLE'
+                            : 'SELECCIONA TU TALLA',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .8,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: p.availableSizes
-                          .map(
-                            (value) => ChoiceChip(
-                              label: Text(value),
-                              selected: size == value,
-                              onSelected: (_) {
-                                HapticFeedback.selectionClick();
-                                setState(() => size = value);
-                              },
-                              selectedColor: ink,
-                              backgroundColor: Colors.white,
-                              side: BorderSide(
-                                color: size == value ? ink : line,
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: p.availableSizes
+                            .map(
+                              (value) => ChoiceChip(
+                                label: Text(value),
+                                selected: size == value,
+                                onSelected: (_) {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => size = value);
+                                },
+                                selectedColor: ink,
+                                backgroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: size == value ? ink : line,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: size == value ? Colors.white : ink,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
                               ),
-                              labelStyle: TextStyle(
-                                color: size == value ? Colors.white : ink,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 11,
+                            )
+                            .toList(),
+                      ),
+                    ],
+                    if (p.hasColors && p.availableColors.isNotEmpty) ...[
+                      const SizedBox(height: 15),
+                      Text(
+                        p.availableColors.length == 1
+                            ? 'COLOR DISPONIBLE'
+                            : 'SELECCIONA COLOR',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .8,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: p.availableColors
+                            .map(
+                              (value) => ChoiceChip(
+                                label: Text(value),
+                                selected: color == value,
+                                onSelected: (_) {
+                                  HapticFeedback.selectionClick();
+                                  setState(() => color = value);
+                                },
+                                selectedColor: ink,
+                                backgroundColor: Colors.white,
+                                side: BorderSide(
+                                  color: color == value ? ink : line,
+                                ),
+                                labelStyle: TextStyle(
+                                  color: color == value ? Colors.white : ink,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 11,
+                                ),
                               ),
-                            ),
-                          )
-                          .toList(),
-                    ),
+                            )
+                            .toList(),
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     OutlinedButton.icon(
                       onPressed: () {
@@ -454,7 +532,15 @@ class _ProductDetailPageState extends State<ProductDetailPage> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  '${widget.product.name} añadido a la bolsa',
+                                  () {
+                                    final details = [
+                                      if (p.hasSizes && size != null) 'Talla $size',
+                                      if (p.hasColors && color != null) 'Color $color',
+                                    ].join(' • ');
+                                    return details.isNotEmpty
+                                        ? '${widget.product.name} ($details) añadido a la bolsa'
+                                        : '${widget.product.name} añadido a la bolsa';
+                                  }(),
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w600,
