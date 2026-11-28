@@ -41,10 +41,21 @@ let customCategories = [...DEFAULT_CATEGORIES];
 let isDemoMode = false;
 
 const STORE_LABELS = {
-  store_jockey: 'Jockey Plaza',
-  store_salaverry: 'Real Plaza Salaverry',
-  store_san_miguel: 'Plaza San Miguel'
+  store_real_plaza_huancayo: 'Real Plaza Huancayo',
+  store_open_plaza_huancayo: 'Open Plaza Huancayo',
+  store_plaza_constitucion: 'Centro Huancayo',
+  // Compatibilidad con registros anteriores
+  store_jockey: 'Real Plaza Huancayo',
+  store_salaverry: 'Open Plaza Huancayo',
+  store_san_miguel: 'Centro Huancayo'
 };
+
+function normalizeStoreId(rawStore) {
+  if (rawStore === 'store_jockey') return 'store_real_plaza_huancayo';
+  if (rawStore === 'store_salaverry') return 'store_open_plaza_huancayo';
+  if (rawStore === 'store_san_miguel') return 'store_plaza_constitucion';
+  return rawStore || 'store_real_plaza_huancayo';
+}
 
 const SVG_FALLBACK_IMAGE = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='150' fill='%23898780'><rect width='120' height='150' fill='%23faf9f6'/><text x='50%' y='50%' text-anchor='middle' dy='.3em' font-family='sans-serif' font-size='11'>Sin imagen</text></svg>";
 
@@ -77,6 +88,19 @@ const cancelEditBtn = document.getElementById('cancelEditBtn');
 const saveProductBtn = document.getElementById('saveProductBtn');
 const imageInput = document.getElementById('image');
 const imagePreview = document.getElementById('imagePreview');
+const imagePreviewWrap = document.getElementById('imagePreviewWrap');
+
+function updateImagePreview(url) {
+  const cleanUrl = cleanString(url);
+  if (!imagePreview || !imagePreviewWrap) return;
+  if (!cleanUrl) {
+    imagePreview.removeAttribute('src');
+    imagePreviewWrap.classList.add('hidden');
+  } else {
+    imagePreview.src = cleanUrl;
+    imagePreviewWrap.classList.remove('hidden');
+  }
+}
 
 const productsBody = document.getElementById('productsBody');
 const searchInput = document.getElementById('searchInput');
@@ -444,7 +468,7 @@ function applyFilters() {
 
   filteredProducts = allProducts.filter(item => {
     if (cat && item.category !== cat) return false;
-    if (store && item.store !== store) return false;
+    if (store && normalizeStoreId(item.store) !== store) return false;
     if (query) {
       const matchName = item.name.toLowerCase().includes(query);
       const matchTag = item.tag.toLowerCase().includes(query);
@@ -562,7 +586,10 @@ function updatePager() {
 // 8. Product Actions (CRUD)
 function startEdit(id) {
   const p = allProducts.find(x => x.id === id);
-  if (!p) return;
+  if (!p) {
+    showToast('No se encontró la prenda para editar.', 'error');
+    return;
+  }
   editingId = id;
 
   if (formTitle) formTitle.textContent = 'Editar prenda';
@@ -570,24 +597,45 @@ function startEdit(id) {
   if (cancelEditBtn) cancelEditBtn.classList.remove('hidden');
 
   document.getElementById('productId').value = id;
-  document.getElementById('name').value = p.name;
-  document.getElementById('category').value = p.category;
-  document.getElementById('price').value = p.price;
-  document.getElementById('image').value = p.image;
-  imagePreview.src = p.image || SVG_FALLBACK_IMAGE;
-  document.getElementById('store').value = p.store || 'store_jockey';
-  document.getElementById('tag').value = p.tag;
-  document.getElementById('color').value = p.color;
-  document.getElementById('sizes').value = p.sizes.join(', ');
-  document.getElementById('material').value = p.material;
-  document.getElementById('fit').value = p.fit;
-  document.getElementById('care').value = p.care;
-  document.getElementById('description').value = p.description;
+  const nameEl = document.getElementById('name');
+  if (nameEl) nameEl.value = p.name || '';
 
-  // Scroll smoothly to form on mobile
-  if (window.innerWidth < 1100) {
-    productForm.scrollIntoView({ behavior: 'smooth' });
+  const catEl = document.getElementById('category');
+  if (catEl) {
+    const catVal = p.category || 'Hombre';
+    if (!Array.from(catEl.options).some(opt => opt.value === catVal)) {
+      const opt = document.createElement('option');
+      opt.value = catVal;
+      opt.textContent = catVal;
+      catEl.appendChild(opt);
+    }
+    catEl.value = catVal;
   }
+
+  document.getElementById('price').value = p.price || '';
+  const imgUrl = (p.image && !p.image.startsWith('data:image/svg')) ? p.image : '';
+  document.getElementById('image').value = imgUrl;
+  updateImagePreview(imgUrl);
+
+  const storeEl = document.getElementById('store');
+  if (storeEl) {
+    storeEl.value = normalizeStoreId(p.store);
+  }
+
+  document.getElementById('tag').value = p.tag || '';
+  document.getElementById('color').value = p.color || '';
+  document.getElementById('sizes').value = Array.isArray(p.sizes)
+    ? p.sizes.join(', ')
+    : (typeof p.sizes === 'string' ? p.sizes : '');
+  document.getElementById('material').value = p.material || '';
+  document.getElementById('fit').value = p.fit || '';
+  document.getElementById('care').value = p.care || '';
+  document.getElementById('description').value = p.description || '';
+
+  if (productForm) {
+    productForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (nameEl) nameEl.focus();
 }
 
 function resetForm() {
@@ -597,12 +645,12 @@ function resetForm() {
   if (cancelEditBtn) cancelEditBtn.classList.add('hidden');
   productForm.reset();
   document.getElementById('productId').value = '';
-  imagePreview.src = SVG_FALLBACK_IMAGE;
+  updateImagePreview('');
 }
 
 productForm.addEventListener('submit', async (e) => {
   e.preventDefault();
-  if (!db) {
+  if (!db && !isDemoMode) {
     showToast('Firestore no está disponible', 'error');
     return;
   }
@@ -641,10 +689,29 @@ productForm.addEventListener('submit', async (e) => {
     material: materialVal,
     fit: fitVal,
     care: careVal,
-    description: descVal,
-    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+    description: descVal
   };
 
+  if (isDemoMode || !db) {
+    if (editingId) {
+      const idx = allProducts.findIndex(x => x.id === editingId);
+      if (idx !== -1) {
+        allProducts[idx] = { ...allProducts[idx], ...payload, id: editingId };
+      }
+      showToast(`"${nameVal}" actualizada en modo local.`);
+    } else {
+      const newId = 'prod_local_' + Date.now();
+      allProducts.unshift({ ...payload, id: newId });
+      showToast(`"${nameVal}" agregada en modo local.`);
+    }
+    setCachedProducts(allProducts);
+    resetForm();
+    syncCategoriesFromProducts();
+    applyFilters();
+    return;
+  }
+
+  payload.updatedAt = firebase.firestore.FieldValue.serverTimestamp();
   showLoading(editingId ? 'Actualizando prenda…' : 'Guardando prenda…');
   try {
     if (editingId) {
@@ -691,8 +758,16 @@ deleteCancelBtn.addEventListener('click', () => {
 });
 
 deleteConfirmBtn.addEventListener('click', async () => {
-  if (!deletingId || !db) return;
+  if (!deletingId) return;
   deleteModal.classList.add('hidden');
+  if (isDemoMode || !db) {
+    allProducts = allProducts.filter(x => x.id !== deletingId);
+    setCachedProducts(allProducts);
+    deletingId = null;
+    applyFilters();
+    showToast('Prenda eliminada en modo local.');
+    return;
+  }
   showLoading('Eliminando prenda…');
   try {
     await db.collection('productos').doc(deletingId).delete();
@@ -750,11 +825,10 @@ cancelEditBtn.addEventListener('click', resetForm);
 
 // Image preview live update with error handling
 imageInput.addEventListener('input', (e) => {
-  const url = cleanString(e.target.value);
-  imagePreview.src = url || SVG_FALLBACK_IMAGE;
+  updateImagePreview(e.target.value);
 });
 imagePreview.addEventListener('error', () => {
-  imagePreview.src = SVG_FALLBACK_IMAGE;
+  if (imagePreviewWrap) imagePreviewWrap.classList.add('hidden');
 });
 
 // Search input debounced
